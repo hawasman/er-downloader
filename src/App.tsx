@@ -18,7 +18,9 @@ function App() {
   const [installationDirectory, setInstallationDirectory] = useState("");
   const [progressMessage, setProgressMessage] = useState("");
   const [progress, setProgress] = useState<ProgressEventPayload>();
-  const [downloadStatus, setDownloadStatus] = useState<"idle" | "updating" | "downloading">("idle");
+  const [downloadStatus, setDownloadStatus] = useState<
+    "idle" | "updating" | "downloading"
+  >("idle");
   const [currentTab, setCurrentTab] = useState<"instructions" | "patch-notes">(
     "instructions"
   );
@@ -28,9 +30,7 @@ function App() {
     const unListen = listen<ProgressEventPayload>(
       "download_progress",
       (event) => {
-        setProgressMessage(
-          `Downloading: ${event.payload.name}`
-        );
+        setProgressMessage(`Downloading: ${event.payload.name}`);
         setProgress(event.payload);
       }
     );
@@ -63,7 +63,7 @@ function App() {
         multiple: false,
         title: "Select Installation Directory",
       });
-      if (typeof selected === 'string') {
+      if (typeof selected === "string") {
         console.log("Selected directory:", selected);
         setInstallationDirectory(selected);
       } else {
@@ -73,7 +73,10 @@ function App() {
       }
     } catch (error) {
       console.error("Error opening directory dialog:", error);
-      await message("Could not open directory selector.", { title: "Error", kind: "error" });
+      await message("Could not open directory selector.", {
+        title: "Error",
+        kind: "error",
+      });
     }
   }
 
@@ -82,13 +85,19 @@ function App() {
     setProgressMessage("Starting download...");
     setProgress(undefined); // Reset progress
     try {
-      await invoke("check_for_updates", { downloading: true, directory: installationDirectory });
+      await invoke("check_for_updates", {
+        downloading: true,
+        directory: installationDirectory,
+      });
       setProgressMessage("Download complete");
-      setDownloadStatus("idle")
+      setDownloadStatus("idle");
     } catch (error) {
       console.error("Download failed:", error);
       setProgressMessage("Download failed.");
-      await message(`Download failed: ${error}`, { title: "Error", kind: "error" });
+      await message(`Download failed: ${error}`, {
+        title: "Error",
+        kind: "error",
+      });
       setDownloadStatus("idle"); // Re-enable buttons on failure
     }
   }
@@ -101,17 +110,30 @@ function App() {
     } catch (error) {
       console.error("Failed to fetch patch notes:", error);
       setPathNotes("Failed to load patch notes.");
-      await message("Could not fetch patch notes.", { title: "Error", kind: "error" });
+      await message("Could not fetch patch notes.", {
+        title: "Error",
+        kind: "error",
+      });
     }
   }
 
   async function checkUpdates() {
+    setProgressMessage("Checking for updates...");
     try {
-      await invoke("check_for_updates", { downloading: false, directory: installationDirectory });
-      setDownloadStatus("updating");
+      let result: boolean = await invoke("check_for_updates", {
+        downloading: false,
+        directory: installationDirectory,
+      });
+      if (result) {
+        setDownloadStatus("downloading");
+        await download();
+      }
     } catch (error) {
       console.error("Failed to check for updates");
-      await message(`Failed to check for updates.${error}`, { title: "Error", kind: "error" });
+      await message(`Failed to check for updates.${error}`, {
+        title: "Error",
+        kind: "error",
+      });
       setDownloadStatus("idle"); // Re-enable buttons on failure
     }
   }
@@ -120,9 +142,10 @@ function App() {
   return (
     // Main container: Dark background, full height, flex column layout
     <main className="flex flex-col bg-gray-800  text-slate-800 h-screen font-sans">
-
       {/* Tabs */}
-      <div className="border-b border-slate-200 px-2 pt-2"> {/* Added padding */}
+      <div className="border-b border-slate-200 px-2 pt-2">
+        {" "}
+        {/* Added padding */}
         <nav className="flex space-x-1" aria-label="Tabs">
           <button
             onClick={() => setCurrentTab("instructions")}
@@ -148,21 +171,47 @@ function App() {
         </nav>
       </div>
 
-      {/* Content Area: Takes remaining space, provides padding and scrolling */}
-      <div className="flex-grow p-4 overflow-y-auto bg-slate-200 text-slate-700 "> {/* Content area background */}
-        {/* Instructions Tab Content */}
+      {/* Instructions Section */}
+      <div className="flex-grow p-4 overflow-y-auto bg-slate-200 text-slate-700 ">
         <div hidden={currentTab !== "instructions"}>
-          {/* Using prose for nice typography, inverted for dark mode */}
-          <div className="prose sm:prose prose-invert min-w-full"> {/* Adjusted prose size and max-width */}
-            <h2 className="text-lg font-semibold text-slate-700 mb-3">Installation Steps</h2>
-            <ol className="list-decimal pl-5 space-y-2 text-slate-600">
-              <li>Please do <strong className="text-red-400">not</strong> install the mod directly into your main Elden Ring game directory. Create a separate folder.</li>
-              <li>Press the 'Browse' button below and select an <strong className="text-yellow-500">empty folder</strong> where you want to install the mod files.</li>
-              <li>Ensure no previous version of the mod exists in the selected folder. The downloader does not automatically clean up old files.</li>
-              <li>Press the 'Download and Extract' button.</li>
-              <li>The download progress will be shown below. Once downloaded, the files will be extracted automatically.</li>
-              <li>Wait for the 'Installation Successful' message.</li>
-              <li className="text-yellow-500"><strong className="font-bold">Important:</strong> The extraction step might appear to freeze, especially on slower Hard Disk Drives (HDDs). Please be patient.</li>
+          <div className="prose sm:prose prose-invert min-w-full">
+            <h2 className="text-lg font-semibold text-slate-700 mb-3">
+              Installation Steps
+            </h2>
+            <ol className="list-decimal pl-5 space-y-3 text-slate-700">
+              <li>
+                <span className="font-medium">
+                  Choose Installation Location:
+                </span>
+                <span className="text-red-600 ml-1">
+                  Do not install in the Elden Ring game folder!
+                </span>
+              </li>
+              <li>
+                <span>
+                  Click 'Browse' below and select a folder for installation.
+                </span>
+                <br />
+                <span>
+                  For updates: Select your existing mod folder.
+                  <br />
+                  For new installation: Select an empty folder.
+                </span>
+              </li>
+              <li>
+                <span>Click 'Check for updates' to begin.</span>
+              </li>
+              <li>
+                <span>
+                  Wait for the download to complete. Files will extract
+                  automatically.
+                </span>
+              </li>
+              <li className="bg-yellow-50 p-2 rounded">
+                <span className="font-semibold">Note:</span> Extraction may take
+                several minutes, especially on HDDs. Please don't close the
+                application.
+              </li>
             </ol>
           </div>
         </div>
@@ -170,16 +219,22 @@ function App() {
         {/* Patch Notes Tab Content */}
         <div hidden={currentTab !== "patch-notes"}>
           {/* Using prose for nice typography, inverted for dark mode */}
-          <div className="prose prose-sm sm:prose text-slate-300  max-w-none"> {/* Adjusted prose size and max-width */}
+          <div className="prose prose-sm sm:prose text-slate-300  max-w-none">
+            {" "}
+            {/* Adjusted prose size and max-width */}
             {/* Render markdown content */}
-            <ReactMarkdown>{pathNotes || "Click 'Patch Notes' tab again or wait for notes to load..."}</ReactMarkdown>
+            <ReactMarkdown>
+              {pathNotes ||
+                "Click 'Patch Notes' tab again or wait for notes to load..."}
+            </ReactMarkdown>
           </div>
         </div>
       </div>
 
       {/* Footer Area: Contains progress and controls */}
-      <div className="p-4 border-t border-slate-200 bg-gray-800 text-slate-400 "> {/* Footer background */}
-
+      <div className="p-4 border-t border-slate-200 bg-gray-800 text-slate-400 ">
+        {" "}
+        {/* Footer background */}
         {/* Download Progress Section (Conditional) */}
         {downloadStatus === "downloading" && (
           <div className="mb-4">
@@ -188,12 +243,20 @@ function App() {
               <span className="font-medium text-slate-200">
                 {progressMessage}
               </span>
-              <span hidden={progress?.progress === "N/A"} className="font-medium text-slate-300">
+              <span
+                hidden={progress?.progress === "N/A"}
+                className="font-medium text-slate-300"
+              >
                 {progress?.progress} {/* e.g., "50%" */}
               </span>
             </div>
             {/* Progress Bar */}
-            <div hidden={progress?.progress === "N/A"} className="w-full bg-slate-600 rounded h-2.5"> {/* Bar background */}
+            <div
+              hidden={progress?.progress === "N/A"}
+              className="w-full bg-slate-600 rounded h-2.5"
+            >
+              {" "}
+              {/* Bar background */}
               <div
                 className="bg-indigo-600 h-2.5 rounded transition-width duration-150 ease-linear" // Bar fill
                 style={{ width: progress?.progress ?? "0%" }} // Use progress state
@@ -205,28 +268,36 @@ function App() {
                 Speed: {progress?.speed ?? "N/A"}
               </span>
               <span hidden={progress?.total_size === "N/A"}>
-                Size: {progress?.total_size ? `${progress.current_size} / ${progress.total_size}` : "Calculating..."}
+                Size:{" "}
+                {progress?.total_size
+                  ? `${progress.current_size} / ${progress.total_size}`
+                  : "Calculating..."}
               </span>
             </div>
           </div>
         )}
-
         {/* Action Form */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (installationDirectory === "") {
-              void message("Please select an installation directory.", { title: "Error", kind: "error" });
+              void message("Please select an installation directory.", {
+                title: "Error",
+                kind: "error",
+              });
               return;
             }
             if (downloadStatus === "idle") {
-              void checkUpdates()
+              void checkUpdates();
             }
             if (downloadStatus === "updating") {
-              void download()
+              void download();
             }
             if (downloadStatus === "downloading") {
-              void message("Download in progress. Please wait.", { title: "Error", kind: "error" });
+              void message("Download in progress. Please wait.", {
+                title: "Error",
+                kind: "error",
+              });
               return;
             }
           }}
@@ -259,7 +330,9 @@ function App() {
             {/* Download Button (Primary) */}
             <button
               type="submit"
-              disabled={installationDirectory === "" || downloadStatus === "downloading"}
+              disabled={
+                installationDirectory === "" || downloadStatus === "downloading"
+              }
               className={`w-full py-2 px-4 rounded text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 transition-colors duration-150 ease-in-out ${installationDirectory === "" || downloadStatus === "downloading"
                 ? "bg-slate-600 cursor-not-allowed opacity-70" // Disabled style
                 : "bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500" // Enabled style
@@ -269,16 +342,6 @@ function App() {
               {downloadStatus === "idle" && "Check for updates"}
               {downloadStatus === "updating" && "Download"}
             </button>
-            {/* Check Updates Button (Secondary) 
-            <button
-              type="button"
-              disabled={downloading}
-              onClick={checkUpdates}
-              className="px-4 py-2 bg-slate-600 text-slate-200 rounded text-sm font-medium hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out whitespace-nowrap" // Added whitespace-nowrap
-            >
-              Check Updates
-            </button>
-            */}
           </div>
         </form>
       </div>

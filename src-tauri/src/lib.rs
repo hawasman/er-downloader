@@ -87,19 +87,18 @@ async fn get_patch_notes() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn check_for_updates(downloading: bool, directory: &str) -> Result<(), String> {
-    let updates = match helpers::check_updates(downloading, directory).await {
-        Ok(updates) => updates,
-        Err(e) => return Err(e.to_string()),
-    };
+async fn check_for_updates(downloading: bool, directory: &str) -> Result<bool, String> {
+    let updates = helpers::check_updates(downloading, directory)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    if downloading {
+    if !downloading {
+        Ok(updates.is_empty())
+    } else {
         download_updates(updates, directory)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())
     }
-
-    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
