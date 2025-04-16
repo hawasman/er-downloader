@@ -1,6 +1,7 @@
+use dotenv::dotenv;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use std::{collections::HashMap, env, fs::File, io::Read, path::Path};
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use version_compare::{Cmp, Version};
@@ -98,6 +99,8 @@ pub async fn check_updates(
     downloading: bool,
     directory: &str,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    dotenv().ok();
+    let updates_url = env::var("UPDATES_URL").expect("UPDATES_URL must be set in the environment");
     println!("Checking for updates...");
     let file_path = Path::new(directory).join("version.txt");
 
@@ -113,7 +116,7 @@ pub async fn check_updates(
         .collect::<String>();
     let client = reqwest::Client::new();
     println!("Getting update info");
-    let response = client.get("http://localhost/updates.json").send().await;
+    let response = client.get(updates_url).send().await;
 
     if let Err(err) = response {
         eprintln!("Error getting update info: {}", err);
