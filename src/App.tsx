@@ -1,226 +1,288 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { message, open } from "@tauri-apps/plugin-dialog";
-import { exit } from '@tauri-apps/plugin-process';
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import "./App.css";
 
 interface ProgressEventPayload {
+  name: string;
   total_size: string;
   current_size: string;
-  progress: string;
+  progress: string; // Expecting "XX%"
   speed: string;
 }
 
 function App() {
-  const [pathNotes, setPathNotes] = useState<string>("")
-  const [installationDirectory, setInstallationDirectory] = useState('');
-  const [progressMessage, setProgressMessage] = useState("")
-  const [progress, setProgress] = useState<ProgressEventPayload>()
-  const [downloading, setDownloading] = useState(false)
-  const [currentTab, setCurrentTab] = useState<"instructions" | "patch-notes">("instructions")
+  const [pathNotes, setPathNotes] = useState<string>("");
+  const [installationDirectory, setInstallationDirectory] = useState("");
+  const [progressMessage, setProgressMessage] = useState("");
+  const [progress, setProgress] = useState<ProgressEventPayload>();
+  const [downloadStatus, setDownloadStatus] = useState<"idle" | "updating" | "downloading">("idle");
+  const [currentTab, setCurrentTab] = useState<"instructions" | "patch-notes">(
+    "instructions"
+  );
+
+  // --- Event Listeners ---
+  useEffect(() => {
+    const unListen = listen<ProgressEventPayload>(
+      "download_progress",
+      (event) => {
+        setProgressMessage(
+          `Downloading: ${event.payload.name}`
+        );
+        setProgress(event.payload);
+      }
+    );
+    return () => {
+      unListen.then((f) => f());
+    };
+  }, []);
 
   useEffect(() => {
-    const unListen = listen<ProgressEventPayload>('download_progress', (event) => {
-      setProgressMessage(`Download progress: ${event.payload.current_size}/${event.payload.total_size} `);
-      setProgress(event.payload)
+    const unListen = listen<string>("get_patch_notes", (event) => {
+      setPathNotes(event.payload);
     });
     return () => {
       unListen.then((f) => f());
     };
-  }
-    , []);
+  }, []);
 
+  // --- Initial Actions ---
   useEffect(() => {
-    const unListen = listen<string>('get_patch_notes', (event) => {
-      setPathNotes(event.payload)
-    });
-    return () => {
-      unListen.then((f) => f());
-    };
-  }
-    , []);
+    // Check for updates once on component mount
+    void invoke("check_for_updates", { download: false });
+    console.log("Initial update check triggered");
+  }, []); // Empty dependency array ensures this runs only once
 
-
+  // --- Async Functions ---
   async function openDialog() {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Select installation directory",
-    });
-    if (selected) {
-      console.log("Selected directory:", selected);
-      setInstallationDirectory(selected as string);
-    } else {
-      setInstallationDirectory('');
-      console.log("No directory selected");
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Installation Directory",
+      });
+      if (typeof selected === 'string') {
+        console.log("Selected directory:", selected);
+        setInstallationDirectory(selected);
+      } else {
+        // User cancelled or selected nothing
+        // setInstallationDirectory(""); // Keep existing path if cancelled
+        console.log("No directory selected or selection cancelled");
+      }
+    } catch (error) {
+      console.error("Error opening directory dialog:", error);
+      await message("Could not open directory selector.", { title: "Error", kind: "error" });
     }
   }
 
   async function download() {
-    setDownloading(true)
-    setProgressMessage("Downloading...")
-    await invoke("download_er")
-    setProgressMessage("Download complete")
-    extractFile()
-
-  }
-
-  async function extractFile() {
-    setDownloading(true)
-    setProgressMessage("Extracting...")
-    await invoke("extract_file", { extractPath: installationDirectory })
-    setProgressMessage("Extraction complete")
-    await message('Installation Successful', { title: 'Convergence ER Downloader', kind: 'info' });
-    setDownloading(false)
+    setDownloadStatus("downloading");
+    setProgressMessage("Starting download...");
+    setProgress(undefined); // Reset progress
+    try {
+      await invoke("check_for_updates", { downloading: true, directory: installationDirectory });
+      setProgressMessage("Download complete");
+      setDownloadStatus("idle")
+    } catch (error) {
+      console.error("Download failed:", error);
+      setProgressMessage("Download failed.");
+      await message(`Download failed: ${error}`, { title: "Error", kind: "error" });
+      setDownloadStatus("idle"); // Re-enable buttons on failure
+    }
   }
 
   async function getPatchNotes() {
-    if (pathNotes !== "") return
-    setPathNotes("Fetching patch notes...")
-    await invoke("get_patch_notes")
+    if (pathNotes !== "" && pathNotes !== "Fetching patch notes...") return; // Avoid re-fetching if already loaded or loading
+    setPathNotes("Fetching patch notes...");
+    try {
+      await invoke("get_patch_notes"); // This triggers the event listener which updates state
+    } catch (error) {
+      console.error("Failed to fetch patch notes:", error);
+      setPathNotes("Failed to load patch notes.");
+      await message("Could not fetch patch notes.", { title: "Error", kind: "error" });
+    }
   }
 
-  return (
-    <main className="flex flex-col bg-zinc-800 text-gray-200 h-screen justify-between p-3">
-      <div className="flex justify-between items-center w-full">
-        <h2 className="text-2xl">Convergence ER Downloader</h2>
-        <div className="flex gap-2">
-          {/* <button
-            className="text-gray-500 hover:text-gray-700"
-            onClick={async () => {
-              const window = getCurrentWindow();
-              await window.minimize();
+  async function checkUpdates() {
+    try {
+      await invoke("check_for_updates", { downloading: false, directory: installationDirectory });
+      setDownloadStatus("updating");
+    } catch (error) {
+      console.error("Failed to check for updates");
+      await message(`Failed to check for updates.${error}`, { title: "Error", kind: "error" });
+      setDownloadStatus("idle"); // Re-enable buttons on failure
+    }
+  }
 
-            }}
-          >
-            <span className="text-4xl">-</span>
-          </button> */}
-          <button
-            className="text-gray-500 hover:text-gray-700"
-            onClick={async () => {
-              await exit(0);
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
+  // --- Render ---
+  return (
+    // Main container: Dark background, full height, flex column layout
+    <main className="flex flex-col bg-gray-800  text-slate-800 h-screen font-sans">
+
       {/* Tabs */}
-      <div className="mb-4"></div>
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex" aria-label="Tabs">
-          <button onClick={() => setCurrentTab("instructions")} className={"border-b-3 py-2 px-4 text-sm font-medium" + (currentTab === "instructions" ? "  border-indigo-200 text-indigo-400" : " border-transparent text-gray-200 hover:border-gray-300")}>
+      <div className="border-b border-slate-200 px-2 pt-2"> {/* Added padding */}
+        <nav className="flex space-x-1" aria-label="Tabs">
+          <button
+            onClick={() => setCurrentTab("instructions")}
+            className={`px-4 py-2 text-sm font-medium rounded-t transition-colors duration-150 ease-in-out ${currentTab === "instructions"
+              ? "bg-slate-400 border-b-2 border-gray-200 text-400 text-white" // Active tab style
+              : "text-slate-200 hover:bg-slate-400 hover:text-slate-200" // Inactive tab style
+              }`}
+          >
             Instructions
           </button>
-          <button onClick={() => {
-            getPatchNotes();
-            setCurrentTab("patch-notes")
-          }} className={"border-b-3 py-2 px-4 text-sm font-medium" + (currentTab === "patch-notes" ? "  border-indigo-200 text-indigo-400" : " border-transparent text-gray-200 hover:border-gray-300")}>
+          <button
+            onClick={() => {
+              void getPatchNotes(); // Fetch notes when tab is clicked (if not already fetched)
+              setCurrentTab("patch-notes");
+            }}
+            className={`px-4 py-2 text-sm font-medium rounded-t transition-colors duration-150 ease-in-out ${currentTab === "patch-notes"
+              ? "bg-slate-400 border-b-2 border-gray-200 text-400 text-white" // Active tab style
+              : "text-slate-200 hover:bg-slate-400 hover:text-slate-200" // Inactive tab style
+              }`}
+          >
             Patch Notes
           </button>
         </nav>
       </div>
 
-      {/* Content */}
-      <div hidden={currentTab !== "instructions"} className="mb-auto">
-        <div className="prose">
-          <h2 className="mb-4"></h2>
-          <ol className="text-gray-200 list-decimal px-4">
-            <li>Please do not install the mod into the game directory.</li>
-            <li>Press the 'Browse' button and navigate to the folder where you want to install the mod files.</li>
-            <li>Make sure the old version does not exist in the selected folder</li>
-            <li>Press the 'Download and Extract' button. The download process will start.</li>
-            <li>When the download is complete, the files will be unpacked. Please wait until it is finished.</li>
-            <li>You will see the 'Installation Successful' message.</li>
-            <li>THE UNPACKING STEP MIGHT HANG UP. PLEASE BE PATIENT, ESPECIALLY IF YOU ARE ON HDD.</li>
-          </ol>
+      {/* Content Area: Takes remaining space, provides padding and scrolling */}
+      <div className="flex-grow p-4 overflow-y-auto bg-slate-200 text-slate-700 "> {/* Content area background */}
+        {/* Instructions Tab Content */}
+        <div hidden={currentTab !== "instructions"}>
+          {/* Using prose for nice typography, inverted for dark mode */}
+          <div className="prose sm:prose prose-invert min-w-full"> {/* Adjusted prose size and max-width */}
+            <h2 className="text-lg font-semibold text-slate-700 mb-3">Installation Steps</h2>
+            <ol className="list-decimal pl-5 space-y-2 text-slate-600">
+              <li>Please do <strong className="text-red-400">not</strong> install the mod directly into your main Elden Ring game directory. Create a separate folder.</li>
+              <li>Press the 'Browse' button below and select an <strong className="text-yellow-500">empty folder</strong> where you want to install the mod files.</li>
+              <li>Ensure no previous version of the mod exists in the selected folder. The downloader does not automatically clean up old files.</li>
+              <li>Press the 'Download and Extract' button.</li>
+              <li>The download progress will be shown below. Once downloaded, the files will be extracted automatically.</li>
+              <li>Wait for the 'Installation Successful' message.</li>
+              <li className="text-yellow-500"><strong className="font-bold">Important:</strong> The extraction step might appear to freeze, especially on slower Hard Disk Drives (HDDs). Please be patient.</li>
+            </ol>
+          </div>
+        </div>
+
+        {/* Patch Notes Tab Content */}
+        <div hidden={currentTab !== "patch-notes"}>
+          {/* Using prose for nice typography, inverted for dark mode */}
+          <div className="prose prose-sm sm:prose text-slate-300  max-w-none"> {/* Adjusted prose size and max-width */}
+            {/* Render markdown content */}
+            <ReactMarkdown>{pathNotes || "Click 'Patch Notes' tab again or wait for notes to load..."}</ReactMarkdown>
+          </div>
         </div>
       </div>
 
-      {/* TODO: Replace with a markdown version of the path notes from a server */}
-      <div hidden={currentTab !== "patch-notes"} className="mb-auto overflow-auto">
-        <div className="prose prose-invert">
-          <ReactMarkdown>{pathNotes}</ReactMarkdown>
-        </div>
-      </div>
+      {/* Footer Area: Contains progress and controls */}
+      <div className="p-4 border-t border-slate-200 bg-gray-800 text-slate-400 "> {/* Footer background */}
 
-      {/* Download Progress */}
-      {
-        downloading && (
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold mb-4">Download Progress</h2>
+        {/* Download Progress Section (Conditional) */}
+        {downloadStatus === "downloading" && (
+          <div className="mb-4">
+            {/* Progress Text */}
+            <div className="flex justify-between mb-1 text-sm">
+              <span className="font-medium text-slate-200">
+                {progressMessage}
+              </span>
+              <span hidden={progress?.progress === "N/A"} className="font-medium text-slate-300">
+                {progress?.progress} {/* e.g., "50%" */}
+              </span>
+            </div>
+            {/* Progress Bar */}
+            <div hidden={progress?.progress === "N/A"} className="w-full bg-slate-600 rounded h-2.5"> {/* Bar background */}
+              <div
+                className="bg-indigo-600 h-2.5 rounded transition-width duration-150 ease-linear" // Bar fill
+                style={{ width: progress?.progress ?? "0%" }} // Use progress state
+              ></div>
+            </div>
+            {/* Speed/Size Info */}
+            <div className="flex justify-between mt-1 text-xs text-slate-400">
+              <span hidden={progress?.speed === "N/A"}>
+                Speed: {progress?.speed ?? "N/A"}
+              </span>
+              <span hidden={progress?.total_size === "N/A"}>
+                Size: {progress?.total_size ? `${progress.current_size} / ${progress.total_size}` : "Calculating..."}
+              </span>
+            </div>
           </div>
-        )
-      }
-      {
-        downloading && (
-          <div className="mb-6">
-            <div className="flex justify-between mb-1">
-              <span className="text-base font-medium text-blue-700 dark:text-white">{progressMessage}</span>
-              <span className="text-sm font-medium text-blue-700 dark:text-white">{progress?.progress}</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-              <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress?.progress}` }}></div>
-            </div>
-            <div className="flex justify-between mt-1">
-              <span className="text-sm font-medium text-blue-700 dark:text-white">Download speed: {progress?.speed}</span>
-              <span className="text-sm font-medium text-blue-700 dark:text-white">Total size: {progress?.total_size}</span>
-            </div>
-          </div>
-        )
-      }
+        )}
 
-      {/* Download Form */}
-      <form onSubmit={(e) => {
-        e.preventDefault();
-        download();
-      }} className="space-y-4">
-        <div className="flex gap-2 p-2">
-          <input
-            type="text"
-            placeholder="Select installation directory"
-            value={installationDirectory || ""}
-            className="flex-1 p-2 border border-gray-200 rounded-md"
-            readOnly
-          />
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              openDialog();
-            }}
-            disabled={downloading}
-            type="button"
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-          >
-            Browse
-          </button>
-        </div>
-        <button
-          type="submit"
-          disabled={installationDirectory === '' || downloading}
-          className={`w-full py-2 px-4 rounded-md text-white ${(downloading || installationDirectory === '')
-            ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-indigo-600 hover:bg-indigo-700'}`}
+        {/* Action Form */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (installationDirectory === "") {
+              void message("Please select an installation directory.", { title: "Error", kind: "error" });
+              return;
+            }
+            if (downloadStatus === "idle") {
+              void checkUpdates()
+            }
+            if (downloadStatus === "updating") {
+              void download()
+            }
+            if (downloadStatus === "downloading") {
+              void message("Download in progress. Please wait.", { title: "Error", kind: "error" });
+              return;
+            }
+          }}
+          className="space-y-3" // Spacing between form elements
         >
-          Download and Extract
-        </button>
-      </form>
-    </main >
+          {/* Directory Selection */}
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              placeholder="Select installation directory..."
+              value={installationDirectory || ""}
+              className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-slate-200 placeholder-slate-300 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+              readOnly // User selects via button
+            />
+            <button
+              onClick={(e) => {
+                e.preventDefault(); // Prevent form submission
+                void openDialog();
+              }}
+              disabled={downloadStatus !== "idle"}
+              type="button"
+              className="px-4 py-2 bg-slate-600 text-slate-200 rounded text-sm font-medium hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out"
+            >
+              Browse
+            </button>
+          </div>
+
+          {/* Primary and Secondary Actions */}
+          <div className="flex items-center gap-2">
+            {/* Download Button (Primary) */}
+            <button
+              type="submit"
+              disabled={installationDirectory === "" || downloadStatus === "downloading"}
+              className={`w-full py-2 px-4 rounded text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 transition-colors duration-150 ease-in-out ${installationDirectory === "" || downloadStatus === "downloading"
+                ? "bg-slate-600 cursor-not-allowed opacity-70" // Disabled style
+                : "bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500" // Enabled style
+                }`}
+            >
+              {downloadStatus === "downloading" && "Processing..."}
+              {downloadStatus === "idle" && "Check for updates"}
+              {downloadStatus === "updating" && "Download"}
+            </button>
+            {/* Check Updates Button (Secondary) 
+            <button
+              type="button"
+              disabled={downloading}
+              onClick={checkUpdates}
+              className="px-4 py-2 bg-slate-600 text-slate-200 rounded text-sm font-medium hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out whitespace-nowrap" // Added whitespace-nowrap
+            >
+              Check Updates
+            </button>
+            */}
+          </div>
+        </form>
+      </div>
+    </main>
   );
 }
 

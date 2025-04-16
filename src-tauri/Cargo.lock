@@ -1062,6 +1062,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tokio",
+ "version-compare",
  "zip",
 ]
 

@@ -12,11 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "er-downloader",
+        "title": "Convergence Downloader",
         "width": 800,
         "height": 600,
         "resizable": false,
-        "decorations": false,
+        "decorations": true,
         "fullscreen": false,
         "maximized": false
       }
