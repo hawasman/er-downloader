@@ -120,13 +120,15 @@ function App() {
   async function checkUpdates() {
     setProgressMessage("Checking for updates...");
     try {
+
+      setDownloadStatus("downloading");
       let result: boolean = await invoke("check_for_updates", {
-        downloading: false,
+        downloading: true,
         directory: installationDirectory,
       });
       if (result) {
-        setDownloadStatus("downloading");
-        await download();
+        setDownloadStatus("idle");
+        // await download();
       }
     } catch (error) {
       console.error("Failed to check for updates");

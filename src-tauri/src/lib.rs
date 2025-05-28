@@ -1,6 +1,6 @@
 mod downloader;
 mod helpers;
-use dotenv::dotenv;
+use dotenvy_macro::dotenv;
 use downloader::download_updates;
 use helpers::GLOBAL_APP_HANDLE;
 use std::{env, fs::File};
@@ -54,9 +54,7 @@ async fn extract_file(extract_path: &str) -> Result<(), String> {
 
 #[tauri::command]
 async fn get_patch_notes() -> Result<(), String> {
-    dotenv().ok();
-    let patch_notes_url =
-        env::var("PATCH_NOTES_URL").expect("PATCH_NOTES_URL must be set in the environment");
+    let patch_notes_url = dotenv!("PATCH_NOTES_URL");
     let client = reqwest::Client::new();
     println!("Getting update info");
     let response = client.get(patch_notes_url).send().await;

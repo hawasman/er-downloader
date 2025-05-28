@@ -2,13 +2,30 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://*", "http://*"]
+  },
+  "internetAccess": {
+    "scope": ["https://*", "http://*"]
+  },
+  "platforms": ["linux", "macOS", "windows"],
   "permissions": [
-    "core:default",
-    "opener:default",
-    "dialog:default",
-    "process:default"
+    "core:app:default",
+    "core:event:default",
+    "core:image:default",
+    "core:menu:default",
+    "core:path:default",
+    "core:resources:default",
+    "core:window:default",
+    "core:tray:default",
+    "core:webview:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-confirm",
+    "core:window:allow-close",
+    "core:window:allow-create",
+    "core:window:allow-minimize",
+    "opener:allow-open-path"
   ]
 }

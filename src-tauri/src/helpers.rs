@@ -1,7 +1,7 @@
-use dotenv::dotenv;
+use dotenvy_macro::dotenv;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, fs::File, io::Read, path::Path};
+use std::{collections::HashMap, fs::File, io::Read, path::Path};
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use version_compare::{Cmp, Version};
@@ -99,8 +99,7 @@ pub async fn check_updates(
     downloading: bool,
     directory: &str,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    dotenv().ok();
-    let updates_url = env::var("UPDATES_URL").expect("UPDATES_URL must be set in the environment");
+    let updates_url = dotenv!("UPDATES_URL");
     println!("Checking for updates...");
     let file_path = Path::new(directory).join("version.txt");
 

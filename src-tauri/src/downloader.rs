@@ -1,10 +1,9 @@
 use crate::helpers::{format_size, format_speed, DropboxResponse, GLOBAL_APP_HANDLE};
 use curl::easy::{Easy, WriteError};
-use dotenv::dotenv;
+use dotenvy_macro::dotenv;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde_json::json;
 use std::{
-    env,
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -133,10 +132,8 @@ pub async fn download_file(
 }
 
 pub async fn generate_download_link(file_path: &str) -> Result<String, Box<dyn std::error::Error>> {
-    dotenv().ok();
     println!("Generating download link...");
-    let dropbox_token =
-        env::var("DROPBOX_TOKEN").expect("DROPBOX_TOKEN must be set in the environment");
+    let dropbox_token = dotenv!("DROPBOX_TOKEN");
     // let file_path = "/ConvergenceER.zip";
     let url = "https://api.dropboxapi.com/2/files/get_temporary_link";
     let client = reqwest::Client::new();
@@ -207,6 +204,8 @@ pub async fn download_updates(
                             }
                             archive.extract(extract_path).map_err(|e| e.to_string())?;
                             println!("File extracted successfully!");
+                            fs::remove_file("Download/Convergence.zip")
+                                .expect("Failed to remove file");
                             if let Some(app_handle) = GLOBAL_APP_HANDLE.get() {
                                 app_handle
                                     .dialog()
@@ -257,10 +256,42 @@ pub async fn download_updates(
         loop {
             match download_file(&download_link, &output_path).await {
                 Ok(_) => {
+                    println!("Download completed successfully: {}", update_name);
+                    println!("Extracting file...");
+                    if let Some(app_handle) = GLOBAL_APP_HANDLE.get() {
+                        app_handle
+                            .emit(
+                                "download_progress",
+                                Progress {
+                                    name: format!("Extracting..."),
+                                    total_size: "N/A".to_string(),
+                                    current_size: "N/A".to_string(),
+                                    speed: "N/A".to_string(),
+                                    progress: "100%".to_string(),
+                                },
+                            )
+                            .unwrap();
+                    }
                     let file_path = format!("Download/{}", update);
                     let file = File::open(file_path).map_err(|e| e.to_string())?;
                     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
                     archive.extract(extract_path).map_err(|e| e.to_string())?;
+                    println!("File extracted successfully!");
+                    fs::remove_file(output_path).expect("Failed to remove file");
+                    if let Some(app_handle) = GLOBAL_APP_HANDLE.get() {
+                        app_handle
+                            .emit(
+                                "download_progress",
+                                Progress {
+                                    name: format!("Extraction completed"),
+                                    total_size: "N/A".to_string(),
+                                    current_size: "N/A".to_string(),
+                                    speed: "N/A".to_string(),
+                                    progress: "100%".to_string(),
+                                },
+                            )
+                            .unwrap();
+                    }
                     break;
                 }
                 Err(_) => {
